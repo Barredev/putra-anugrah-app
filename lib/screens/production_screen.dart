@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import '../database/database_helper.dart';
+import '../utils/formatters.dart';
 import 'bom_screen.dart';
 
 /// Screen untuk menjalankan produksi.
 /// Owner pilih produk jadi → input jumlah → sistem cek bahan → produksi.
 class ProductionScreen extends StatefulWidget {
-  const ProductionScreen({super.key});
+  final int? initialProductId;
+
+  const ProductionScreen({super.key, this.initialProductId});
 
   @override
   State<ProductionScreen> createState() => _ProductionScreenState();
@@ -60,6 +63,13 @@ class _ProductionScreenState extends State<ProductionScreen> {
         _finishedProducts = finished;
         _isLoadingProducts = false;
       });
+      if (widget.initialProductId != null) {
+        final matches =
+            finished.where((p) => p['id'] == widget.initialProductId);
+        if (matches.isNotEmpty) {
+          await _selectProduct(matches.first);
+        }
+      }
     }
   }
 
@@ -131,7 +141,7 @@ class _ProductionScreenState extends State<ProductionScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text("Konfirmasi Produksi", style: TextStyle(fontWeight: FontWeight.bold)),
         content: Text(
-          "Produksi ${_fmt(_qty)} unit $productName?\n\n"
+          "Produksi ${formatQty(_qty)} unit $productName?\n\n"
           "Bahan baku akan otomatis dikurangi sesuai BOM.",
         ),
         actions: [
@@ -168,7 +178,7 @@ class _ProductionScreenState extends State<ProductionScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-                "Berhasil produksi ${_fmt(_qty)} unit $productName"),
+                "Berhasil produksi ${formatQty(_qty)} unit $productName"),
             backgroundColor: Colors.green,
           ),
         );
@@ -187,9 +197,6 @@ class _ProductionScreenState extends State<ProductionScreen> {
     }
   }
 
-  String _fmt(num v) =>
-      v == v.toInt() ? v.toInt().toString() : v.toStringAsFixed(2);
-
   // ── Bahan yang dibutuhkan untuk qty produksi
   double _needed(double bomQty) => bomQty * _qty;
 
@@ -198,7 +205,8 @@ class _ProductionScreenState extends State<ProductionScreen> {
     return InputDecoration(
       hintText: hint,
       hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-      prefixIcon: Icon(icon, color: Colors.blueAccent.withOpacity(0.7), size: 22),
+      prefixIcon:
+          Icon(icon, color: Colors.blueAccent.withValues(alpha: 0.7), size: 22),
       filled: true,
       fillColor: Colors.white,
       border: OutlineInputBorder(
@@ -265,7 +273,7 @@ class _ProductionScreenState extends State<ProductionScreen> {
                       const SizedBox(height: 12),
                       DropdownButtonFormField<int>(
                         isExpanded: true,
-                        value: _selectedProduct?['id'] as int?,
+                        initialValue: _selectedProduct?['id'] as int?,
                         decoration: _inputDecor("Pilih produk yang akan diproduksi", Icons.inventory_2_outlined),
                         icon: const Icon(Icons.arrow_drop_down_rounded, color: Colors.grey),
                         items: _finishedProducts.map((p) {
@@ -273,7 +281,7 @@ class _ProductionScreenState extends State<ProductionScreen> {
                           return DropdownMenuItem<int>(
                             value: p['id'] as int,
                             child: Text(
-                              "${p['name']}  (Stok: ${_fmt(stock)} ${p['unit']})",
+                              "${p['name']}  (Stok: ${formatQty(stock)} ${p['unit']})",
                               style: const TextStyle(fontWeight: FontWeight.w500),
                             ),
                           );
@@ -308,7 +316,7 @@ class _ProductionScreenState extends State<ProductionScreen> {
                                   borderRadius: const BorderRadius.horizontal(left: Radius.circular(16)),
                                   onTap: () {
                                     final v = _qty - 1;
-                                    if (v >= 1) _qtyController.text = _fmt(v);
+                                    if (v >= 1) _qtyController.text = formatQty(v);
                                   },
                                   child: Container(
                                     width: 60,
@@ -340,7 +348,7 @@ class _ProductionScreenState extends State<ProductionScreen> {
                                   borderRadius: const BorderRadius.horizontal(right: Radius.circular(16)),
                                   onTap: () {
                                     final v = _qty + 1;
-                                    _qtyController.text = _fmt(v);
+                                    _qtyController.text = formatQty(v);
                                   },
                                   child: Container(
                                     width: 60,
@@ -448,11 +456,11 @@ class _ProductionScreenState extends State<ProductionScreen> {
                                           ),
                                           const SizedBox(height: 4),
                                           Text(
-                                            "Butuh: ${_fmt(needed)} ${item['material_unit']}",
+                                            "Butuh: ${formatQty(needed)} ${item['material_unit']}",
                                             style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
                                           ),
                                           Text(
-                                            "Stok saat ini: ${_fmt(stockNow)} ${item['material_unit']}",
+                                            "Stok saat ini: ${formatQty(stockNow)} ${item['material_unit']}",
                                             style: TextStyle(
                                               fontSize: 13,
                                               color: ok ? Colors.grey.shade600 : Colors.red,
@@ -526,7 +534,7 @@ class _ProductionScreenState extends State<ProductionScreen> {
                                       ? "Bahan Baku Tidak Cukup"
                                       : _bomItems.isEmpty
                                           ? "BOM Belum Diisi"
-                                          : "Mulai Produksi ${_fmt(_qty)} Unit",
+                                          : "Mulai Produksi ${formatQty(_qty)} Unit",
                               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                             ),
                           ),

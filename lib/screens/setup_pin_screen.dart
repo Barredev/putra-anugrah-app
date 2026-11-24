@@ -1,7 +1,8 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../widgets/pin_numpad.dart';
 import 'dashboard_screen.dart';
-import 'dart:math';
 
 class SetupPinScreen extends StatefulWidget {
   /// true = ganti PIN (dari settings), false = setup pertama kali
@@ -123,153 +124,101 @@ class _SetupPinScreenState extends State<SetupPinScreen>
             )
           : null,
       body: SafeArea(
-        child: Column(
-          children: [
-            const Spacer(),
+        child: LayoutBuilder(
+          builder: (context, constraints) => SingleChildScrollView(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
+              child: IntrinsicHeight(
+                child: Column(
+                  children: [
+                    const Spacer(),
 
-            // Judul
-            Text(
-              _step == 1 ? 'Buat PIN Baru' : 'Konfirmasi PIN',
-              style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              _step == 1
-                  ? 'Masukkan 4 digit PIN untuk mengamankan app'
-                  : 'Masukkan kembali PIN yang sama',
-              style: const TextStyle(
-                  color: Colors.white60, fontSize: 13),
-              textAlign: TextAlign.center,
-            ),
-
-            const SizedBox(height: 40),
-
-            // Indikator PIN (4 titik)
-            AnimatedBuilder(
-              animation: _shakeAnim,
-              builder: (ctx, child) {
-                final offset =
-                    sin(_shakeAnim.value * pi * 6) * 12;
-                return Transform.translate(
-                  offset: Offset(offset, 0),
-                  child: child,
-                );
-              },
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: List.generate(4, (i) {
-                  final filled = i < _currentInput.length;
-                  return Container(
-                    margin:
-                        const EdgeInsets.symmetric(horizontal: 10),
-                    width: 18,
-                    height: 18,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: _hasError
-                          ? Colors.red
-                          : filled
-                              ? const Color(0xFF4F8EF7)
-                              : Colors.white24,
+                    // Judul
+                    Text(
+                      _step == 1 ? 'Buat PIN Baru' : 'Konfirmasi PIN',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                  );
-                }),
+                    const SizedBox(height: 8),
+                    Text(
+                      _step == 1
+                          ? 'Masukkan 4 digit PIN untuk mengamankan app'
+                          : 'Masukkan kembali PIN yang sama',
+                      style: const TextStyle(
+                        color: Colors.white60,
+                        fontSize: 13,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+
+                    const SizedBox(height: 36),
+
+                    // Indikator PIN (4 titik)
+                    AnimatedBuilder(
+                      animation: _shakeAnim,
+                      builder: (ctx, child) {
+                        final offset = sin(_shakeAnim.value * pi * 6) * 12;
+                        return Transform.translate(
+                          offset: Offset(offset, 0),
+                          child: child,
+                        );
+                      },
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: List.generate(4, (i) {
+                          final filled = i < _currentInput.length;
+                          return Container(
+                            margin: const EdgeInsets.symmetric(horizontal: 10),
+                            width: 18,
+                            height: 18,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: _hasError
+                                  ? Colors.red
+                                  : filled
+                                      ? const Color(0xFF4F8EF7)
+                                      : Colors.white24,
+                            ),
+                          );
+                        }),
+                      ),
+                    ),
+
+                    const SizedBox(height: 16),
+
+                    // Pesan error
+                    SizedBox(
+                      height: 20,
+                      child: _hasError
+                          ? Text(
+                              _errorMsg,
+                              style: const TextStyle(
+                                color: Colors.red,
+                                fontSize: 13,
+                              ),
+                            )
+                          : null,
+                    ),
+
+                    const Spacer(),
+
+                    // Numpad
+                    PinNumpad(
+                      onKeyTap: _onKeyTap,
+                      onDelete: _onDelete,
+                    ),
+
+                    const SizedBox(height: 24),
+                  ],
+                ),
               ),
             ),
-
-            const SizedBox(height: 16),
-
-            // Pesan error
-            SizedBox(
-              height: 20,
-              child: _hasError
-                  ? Text(
-                      _errorMsg,
-                      style: const TextStyle(
-                          color: Colors.red, fontSize: 13),
-                    )
-                  : null,
-            ),
-
-            const Spacer(),
-
-            // Numpad
-            _buildNumpad(),
-
-            const SizedBox(height: 32),
-          ],
+          ),
         ),
       ),
     );
   }
-
-  Widget _buildNumpad() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 40),
-      child: Column(
-        children: [
-          _numpadRow(['1', '2', '3']),
-          const SizedBox(height: 16),
-          _numpadRow(['4', '5', '6']),
-          const SizedBox(height: 16),
-          _numpadRow(['7', '8', '9']),
-          const SizedBox(height: 16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              const SizedBox(width: 72), // placeholder
-              _numKey('0'),
-              _deleteKey(),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _numpadRow(List<String> keys) => Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: keys.map(_numKey).toList(),
-      );
-
-  Widget _numKey(String key) => GestureDetector(
-        onTap: () => _onKeyTap(key),
-        child: Container(
-          width: 72,
-          height: 72,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: Colors.white.withOpacity(0.08),
-            border: Border.all(color: Colors.white12),
-          ),
-          child: Center(
-            child: Text(
-              key,
-              style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 24,
-                  fontWeight: FontWeight.w500),
-            ),
-          ),
-        ),
-      );
-
-  Widget _deleteKey() => GestureDetector(
-        onTap: _onDelete,
-        child: Container(
-          width: 72,
-          height: 72,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: Colors.white.withOpacity(0.06),
-          ),
-          child: const Center(
-            child: Icon(Icons.backspace_outlined,
-                color: Colors.white70, size: 24),
-          ),
-        ),
-      );
 }

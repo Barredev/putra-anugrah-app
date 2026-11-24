@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../database/database_helper.dart';
+import '../utils/formatters.dart';
+import '../widgets/month_picker_dialog.dart';
 import 'profit_screen.dart';
 
 class AnalysisScreen extends StatefulWidget {
@@ -26,7 +28,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
 
   // --- STATE BARU UNTUK EXPAND ---
   int? _expandedCategoryId;
-  Map<int, List<Map<String, dynamic>>> _productDetailsCache = {};
+  final Map<int, List<Map<String, dynamic>>> _productDetailsCache = {};
   bool _isLoadingDetails = false;
 
   @override
@@ -70,99 +72,18 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   }
 
   Future<void> _pickMonth() async {
-    int tYear = _selectedYear, tMonth = _selectedMonth;
-    const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
-      'Jul', 'Ags', 'Sep', 'Okt', 'Nov', 'Des'
-    ];
-    await showDialog(
+    final picked = await showMonthPickerDialog(
       context: context,
-      builder: (dialogCtx) => StatefulBuilder(
-        builder: (ctx, setD) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Text("Pilih Bulan", style: TextStyle(fontWeight: FontWeight.bold)),
-          content: SizedBox(
-            width: double.maxFinite,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.chevron_left),
-                      onPressed: () => setD(() => tYear--),
-                    ),
-                    Text("$tYear",
-                        style: const TextStyle(
-                            fontSize: 18, fontWeight: FontWeight.bold)),
-                    IconButton(
-                      icon: const Icon(Icons.chevron_right),
-                      onPressed: () => setD(() => tYear++),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                GridView.count(
-                  crossAxisCount: 3,
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  childAspectRatio: 1.8,
-                  mainAxisSpacing: 8,
-                  crossAxisSpacing: 8,
-                  children: List.generate(12, (i) {
-                    final m = i + 1;
-                    final sel = m == tMonth;
-                    return GestureDetector(
-                      onTap: () => setD(() => tMonth = m),
-                      child: Container(
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: sel
-                              ? Colors.blueAccent
-                              : Colors.grey.shade100,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: sel ? Colors.blueAccent : Colors.grey.shade300,
-                          ),
-                        ),
-                        child: Text(
-                          months[i],
-                          style: TextStyle(
-                            color: sel ? Colors.white : Colors.black87,
-                            fontWeight: sel ? FontWeight.bold : FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                    );
-                  }),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(dialogCtx),
-                child: const Text("Batal")),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blueAccent,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              ),
-              onPressed: () {
-                setState(() {
-                  _selectedYear = tYear;
-                  _selectedMonth = tMonth;
-                });
-                Navigator.pop(dialogCtx);
-                _loadData();
-              },
-              child: const Text("Pilih", style: TextStyle(color: Colors.white)),
-            ),
-          ],
-        ),
-      ),
+      initialYear: _selectedYear,
+      initialMonth: _selectedMonth,
     );
+    if (picked != null && mounted) {
+      setState(() {
+        _selectedYear = picked.year;
+        _selectedMonth = picked.month;
+      });
+      _loadData();
+    }
   }
 
   void _pickCategory() {
@@ -231,17 +152,6 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       default:
         return Colors.grey;
     }
-  }
-
-  String _formatRupiah(int amount) {
-    final isNeg = amount < 0;
-    final str = amount.abs().toString();
-    final buf = StringBuffer();
-    for (int i = 0; i < str.length; i++) {
-      if (i > 0 && (str.length - i) % 3 == 0) buf.write('.');
-      buf.write(str[i]);
-    }
-    return isNeg ? '-Rp $buf' : 'Rp $buf';
   }
 
   int get _totalIncome =>
@@ -332,7 +242,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                 final label = isIncome ? 'Pemasukan' : 'Pengeluaran';
                 final color = isIncome ? Colors.green : Colors.redAccent;
                 return LineTooltipItem(
-                  '$label\n${_formatRupiah(spot.y.toInt())}',
+                  '$label\n${formatRupiah(spot.y.toInt())}',
                   TextStyle(
                     color: color,
                     fontWeight: FontWeight.bold,
@@ -352,7 +262,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
             // TITIK DIHILANGKAN AGAR CLEAN
             dotData: const FlDotData(show: false),
             belowBarData: BarAreaData(
-                show: true, color: Colors.green.withOpacity(0.1)),
+                show: true, color: Colors.green.withValues(alpha: 0.1)),
           ),
           LineChartBarData(
             spots: _spots('expense'),
@@ -362,7 +272,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
             // TITIK DIHILANGKAN AGAR CLEAN
             dotData: const FlDotData(show: false),
             belowBarData: BarAreaData(
-                show: true, color: Colors.redAccent.withOpacity(0.1)),
+                show: true, color: Colors.redAccent.withValues(alpha: 0.1)),
           ),
         ],
       ));
@@ -399,7 +309,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         barTouchData: BarTouchData(
           touchTooltipData: BarTouchTooltipData(
             getTooltipItem: (g, gi, rod, ri) => BarTooltipItem(
-              '${ri == 0 ? 'Pemasukan' : 'Pengeluaran'}\n${_formatRupiah(rod.toY.toInt())}',
+              '${ri == 0 ? 'Pemasukan' : 'Pengeluaran'}\n${formatRupiah(rod.toY.toInt())}',
               TextStyle(
                 color: ri == 0 ? Colors.green : Colors.redAccent,
                 fontWeight: FontWeight.bold,
@@ -454,7 +364,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
             margin: const EdgeInsets.only(bottom: 12),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(16),
-              side: BorderSide(color: color.withOpacity(0.3)),
+              side: BorderSide(color: color.withValues(alpha: 0.3)),
             ),
             child: InkWell(
               borderRadius: BorderRadius.circular(16),
@@ -473,7 +383,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                         .getIncomeExpenseByProduct(_monthStr, catId);
                     _productDetailsCache[catId] = details;
                   }
-                  setState(() => _isLoadingDetails = false);
+                  if (mounted) setState(() => _isLoadingDetails = false);
                 }
               },
               child: Padding(
@@ -488,7 +398,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                           width: 12,
                           height: 12,
                           decoration: BoxDecoration(
-                              color: color.withOpacity(0.8), shape: BoxShape.circle),
+                              color: color.withValues(alpha: 0.8), shape: BoxShape.circle),
                         ),
                         const SizedBox(width: 8),
                         Expanded(
@@ -496,7 +406,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                               style: TextStyle(
                                   fontWeight: FontWeight.bold,
                                   fontSize: 14,
-                                  color: color.withOpacity(0.9))),
+                                  color: color.withValues(alpha: 0.9))),
                         ),
                         if (catId != null)
                           Icon(
@@ -508,9 +418,9 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                     const SizedBox(height: 12),
                     Row(
                       children: [
-                        Expanded(child: _miniStat("Masuk", _formatRupiah(inc), Colors.green, CrossAxisAlignment.start)),
-                        Expanded(child: _miniStat("Keluar", _formatRupiah(exp), Colors.red, CrossAxisAlignment.center)),
-                        Expanded(child: _miniStat("Profit", _formatRupiah(prf), prf >= 0 ? Colors.blue : Colors.orange, CrossAxisAlignment.end)),
+                        Expanded(child: _miniStat("Masuk", formatRupiah(inc), Colors.green, CrossAxisAlignment.start)),
+                        Expanded(child: _miniStat("Keluar", formatRupiah(exp), Colors.red, CrossAxisAlignment.center)),
+                        Expanded(child: _miniStat("Profit", formatRupiah(prf), prf >= 0 ? Colors.blue : Colors.orange, CrossAxisAlignment.end)),
                       ],
                     ),
 
@@ -557,9 +467,9 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                                       const SizedBox(height: 6),
                                       Row(
                                         children: [
-                                          Expanded(child: _miniStat("Masuk", _formatRupiah(pInc), Colors.green, CrossAxisAlignment.start)),
-                                          Expanded(child: _miniStat("Keluar", _formatRupiah(pExp), Colors.red, CrossAxisAlignment.start)),
-                                          Expanded(child: _miniStat("Profit", _formatRupiah(pPrf), pPrf >= 0 ? Colors.blue : Colors.orange, CrossAxisAlignment.start)),
+                                          Expanded(child: _miniStat("Masuk", formatRupiah(pInc), Colors.green, CrossAxisAlignment.start)),
+                                          Expanded(child: _miniStat("Keluar", formatRupiah(pExp), Colors.red, CrossAxisAlignment.start)),
+                                          Expanded(child: _miniStat("Profit", formatRupiah(pPrf), pPrf >= 0 ? Colors.blue : Colors.orange, CrossAxisAlignment.start)),
                                         ],
                                       ),
                                     ],
@@ -568,7 +478,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                               ],
                             ),
                           );
-                        }).toList(),
+                        }),
                     ],
                   ],
                 ),
@@ -625,7 +535,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                     label: Text(_monthStr),
                     style: ElevatedButton.styleFrom(
                       elevation: 0,
-                      backgroundColor: Colors.blueAccent.withOpacity(0.1),
+                      backgroundColor: Colors.blueAccent.withValues(alpha: 0.1),
                       foregroundColor: Colors.blueAccent,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       padding: const EdgeInsets.symmetric(vertical: 12),
@@ -675,13 +585,13 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                               child: Row(
                                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                                 children: [
-                                  _summaryCol("Pemasukan", _formatRupiah(_totalIncome), Colors.green),
+                                  _summaryCol("Pemasukan", formatRupiah(_totalIncome), Colors.green),
                                   Container(width: 1, height: 30, color: Colors.grey.shade200),
-                                  _summaryCol("Pengeluaran", _formatRupiah(_totalExpense), Colors.redAccent),
+                                  _summaryCol("Pengeluaran", formatRupiah(_totalExpense), Colors.redAccent),
                                   Container(width: 1, height: 30, color: Colors.grey.shade200),
                                   _summaryCol(
                                     "Profit",
-                                    _formatRupiah(_totalIncome - _totalExpense),
+                                    formatRupiah(_totalIncome - _totalExpense),
                                     _totalIncome - _totalExpense >= 0 ? Colors.blue : Colors.orange,
                                   ),
                                 ],

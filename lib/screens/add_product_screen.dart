@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'; // Tambahan untuk input formatter
 import '../database/database_helper.dart';
+import '../utils/formatters.dart';
 
 class AddProductScreen extends StatefulWidget {
-  const AddProductScreen({super.key});
+  /// Jika diisi, screen berjalan dalam mode Edit Produk.
+  final Map<String, dynamic>? product;
+
+  const AddProductScreen({super.key, this.product});
 
   @override
   State<AddProductScreen> createState() => _AddProductScreenState();
@@ -23,17 +26,39 @@ class _AddProductScreenState extends State<AddProductScreen> {
   bool _isSaving = false;
   bool _isLoadingCategories = true;
 
+  bool get _isEditing => widget.product != null;
+
   @override
   void initState() {
     super.initState();
+    final existing = widget.product;
+    if (existing != null) {
+      nameController.text = (existing['name'] as String?) ?? '';
+      _selectedCategoryId = existing['category_id'] as int?;
+      stockController.text =
+          formatQty((existing['stock'] as num?)?.toDouble() ?? 0.0);
+      purchasePriceController.text = formatThousands(
+          (existing['purchase_price'] as num?)?.toInt() ?? 0);
+      sellingPriceController.text = formatThousands(
+          (existing['selling_price'] as num?)?.toInt() ?? 0);
+      unitController.text = (existing['unit'] as String?) ?? '';
+      minStockController.text =
+          formatQty((existing['min_stock'] as num?)?.toDouble() ?? 0.0);
+    }
     _loadCategories();
   }
 
   Future<void> _loadCategories() async {
     final cats = await DatabaseHelper.instance.getCategories();
     if (mounted) {
+      // Pastikan kategori terpilih memang ada di daftar kategori
+      final validIds = cats.map((c) => c['id'] as int).toSet();
       setState(() {
         _categories = cats;
+        if (_selectedCategoryId != null &&
+            !validIds.contains(_selectedCategoryId)) {
+          _selectedCategoryId = null;
+        }
         _isLoadingCategories = false;
       });
     }
@@ -53,12 +78,8 @@ class _AddProductScreenState extends State<AddProductScreen> {
   Future saveProduct() async {
     if (!_formKey.currentState!.validate()) return;
 
-    // Bersihkan format titik sebelum diubah jadi angka untuk disimpan
-    final rawPurchasePrice = purchasePriceController.text.replaceAll('.', '');
-    final rawSellingPrice = sellingPriceController.text.replaceAll('.', '');
-
-    final purchasePrice = int.tryParse(rawPurchasePrice) ?? 0;
-    final sellingPrice = int.tryParse(rawSellingPrice) ?? 0;
+    final purchasePrice = parseFormattedInt(purchasePriceController.text) ?? 0;
+    final sellingPrice = parseFormattedInt(sellingPriceController.text) ?? 0;
 
     if (sellingPrice < purchasePrice) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -72,7 +93,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
     setState(() => _isSaving = true);
 
     try {
-      await DatabaseHelper.instance.insertProduct({
+      final data = {
         'name': nameController.text.trim(),
         'category_id': _selectedCategoryId,
         'stock': double.tryParse(stockController.text) ?? 0.0,
@@ -80,7 +101,14 @@ class _AddProductScreenState extends State<AddProductScreen> {
         'selling_price': sellingPrice,
         'unit': unitController.text.trim(),
         'min_stock': double.tryParse(minStockController.text) ?? 0.0,
-      });
+      };
+
+      if (_isEditing) {
+        data['id'] = widget.product!['id'];
+        await DatabaseHelper.instance.updateProduct(data);
+      } else {
+        await DatabaseHelper.instance.insertProduct(data);
+      }
 
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
@@ -120,7 +148,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           decoration: BoxDecoration(
-            color: color.withOpacity(0.12),
+            color: color.withValues(alpha: 0.12),
             borderRadius: BorderRadius.circular(6),
           ),
           child: Text(
@@ -140,7 +168,8 @@ class _AddProductScreenState extends State<AddProductScreen> {
       prefixText: prefixText,
       prefixStyle: const TextStyle(color: Colors.black87, fontWeight: FontWeight.bold, fontSize: 16),
       hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-      prefixIcon: Icon(icon, color: Colors.blueAccent.withOpacity(0.7), size: 22),
+      prefixIcon:
+          Icon(icon, color: Colors.blueAccent.withValues(alpha: 0.7), size: 22),
       filled: true,
       fillColor: Colors.white,
       border: OutlineInputBorder(
@@ -168,7 +197,10 @@ class _AddProductScreenState extends State<AddProductScreen> {
     return Scaffold(
       backgroundColor: Colors.grey.shade50,
       appBar: AppBar(
-        title: const Text("Tambah Produk", style: TextStyle(fontWeight: FontWeight.bold)),
+        title: Text(
+          _isEditing ? "Edit Produk" : "Tambah Produk",
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
         elevation: 0,
         backgroundColor: Colors.white,
         foregroundColor: Colors.black87,
@@ -194,9 +226,10 @@ class _AddProductScreenState extends State<AddProductScreen> {
 
                     DropdownButtonFormField<int>(
                       isExpanded: true,
-                      value: _selectedCategoryId,
+                      initialValue: _selectedCategoryId,
                       decoration: _inputDecor("Kategori", "Pilih kategori", Icons.category_outlined),
                       icon: const Icon(Icons.arrow_drop_down_rounded, color: Colors.grey),
+                      validator: (v) => v == null ? "Kategori wajib dipilih" : null,
                       items: _categories.map((cat) {
                         return DropdownMenuItem<int>(
                           value: cat['id'] as int,
@@ -218,7 +251,11 @@ class _AddProductScreenState extends State<AddProductScreen> {
                           child: TextFormField(
                             controller: stockController,
                             keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                            decoration: _inputDecor("Stok Awal", "0", Icons.numbers_rounded),
+                            decoration: _inputDecor(
+                              _isEditing ? "Stok Saat Ini" : "Stok Awal",
+                              "0",
+                              Icons.numbers_rounded,
+                            ),
                             validator: (v) {
                               if (v == null || v.isEmpty) return null;
                               if (double.tryParse(v) == null) return "Angka tidak valid";
@@ -244,13 +281,13 @@ class _AddProductScreenState extends State<AddProductScreen> {
                     TextFormField(
                       controller: purchasePriceController,
                       keyboardType: TextInputType.number,
-                      inputFormatters: [_CurrencyInputFormatter()], // <-- Dipasang di sini
+                      inputFormatters: [CurrencyInputFormatter()],
                       decoration: _inputDecor("Harga Beli", "0", Icons.account_balance_wallet_outlined, prefixText: "Rp "),
                       validator: (v) {
                         if (v == null || v.isEmpty) return "Wajib diisi";
-                        final rawValue = v.replaceAll('.', ''); // Bersihkan titik saat validasi
-                        if (int.tryParse(rawValue) == null) return "Harus angka bulat";
-                        if (int.parse(rawValue) < 0) return "Tidak boleh negatif";
+                        final parsed = parseFormattedInt(v);
+                        if (parsed == null) return "Harus angka bulat";
+                        if (parsed < 0) return "Tidak boleh negatif";
                         return null;
                       },
                     ),
@@ -260,13 +297,13 @@ class _AddProductScreenState extends State<AddProductScreen> {
                     TextFormField(
                       controller: sellingPriceController,
                       keyboardType: TextInputType.number,
-                      inputFormatters: [_CurrencyInputFormatter()], // <-- Dipasang di sini
+                      inputFormatters: [CurrencyInputFormatter()],
                       decoration: _inputDecor("Harga Jual", "0", Icons.monetization_on_outlined, prefixText: "Rp "),
                       validator: (v) {
                         if (v == null || v.isEmpty) return "Wajib diisi";
-                        final rawValue = v.replaceAll('.', ''); // Bersihkan titik saat validasi
-                        if (int.tryParse(rawValue) == null) return "Harus angka bulat";
-                        if (int.parse(rawValue) < 0) return "Tidak boleh negatif";
+                        final parsed = parseFormattedInt(v);
+                        if (parsed == null) return "Harus angka bulat";
+                        if (parsed < 0) return "Tidak boleh negatif";
                         return null;
                       },
                     ),
@@ -307,7 +344,10 @@ class _AddProductScreenState extends State<AddProductScreen> {
                                 width: 24,
                                 child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                               )
-                            : const Text("Simpan Produk", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                            : Text(
+                                _isEditing ? "Simpan Perubahan" : "Simpan Produk",
+                                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                              ),
                       ),
                     ),
                     const SizedBox(height: 20),
@@ -315,43 +355,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
                 ),
               ),
             ),
-    );
-  }
-}
-
-// ==========================================
-// Class Custom Formatter untuk Rupiah
-// ==========================================
-class _CurrencyInputFormatter extends TextInputFormatter {
-  @override
-  TextEditingValue formatEditUpdate(
-      TextEditingValue oldValue, TextEditingValue newValue) {
-    if (newValue.text.isEmpty) {
-      return newValue.copyWith(text: '');
-    }
-
-    // Hapus semua karakter yang bukan angka
-    String numericOnly = newValue.text.replaceAll(RegExp(r'[^0-9]'), '');
-
-    if (numericOnly.isEmpty) {
-      return newValue.copyWith(text: '');
-    }
-
-    // Tambahkan titik setiap 3 digit dari belakang
-    String formatted = '';
-    int count = 0;
-    for (int i = numericOnly.length - 1; i >= 0; i--) {
-      if (count > 0 && count % 3 == 0) {
-        formatted = '.$formatted';
-      }
-      formatted = numericOnly[i] + formatted;
-      count++;
-    }
-
-    // Kembalikan nilai baru beserta posisi kursor yang tepat di akhir
-    return TextEditingValue(
-      text: formatted,
-      selection: TextSelection.collapsed(offset: formatted.length),
     );
   }
 }

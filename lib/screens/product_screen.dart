@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../database/database_helper.dart';
+import '../utils/formatters.dart';
 import 'add_product_screen.dart';
 import 'bom_screen.dart';
 import 'production_screen.dart';
@@ -110,20 +111,6 @@ class _ProductScreenState extends State<ProductScreen>
     return result;
   }
 
-  String _fmt(num v) =>
-      v == v.toInt() ? v.toInt().toString() : v.toStringAsFixed(2);
-
-  // Fungsi tambahan untuk format Rupiah agar lebih rapi
-  String _formatRupiah(num amount) {
-    final str = amount.toInt().abs().toString();
-    final buf = StringBuffer();
-    for (int i = 0; i < str.length; i++) {
-      if (i > 0 && (str.length - i) % 3 == 0) buf.write('.');
-      buf.write(str[i]);
-    }
-    return amount < 0 ? '-Rp $buf' : 'Rp $buf';
-  }
-
   // Dialog Transaksi Baru dengan pilihan Tunai / Non-Tunai
   Future<Map<String, dynamic>?> _showTransactionDialog(String title, bool isOut) async {
     final controller = TextEditingController();
@@ -164,7 +151,7 @@ class _ProductScreenState extends State<ProductScreen>
                     style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
                   ),
                   value: isCash,
-                  activeColor: Colors.blueAccent,
+                  activeThumbColor: Colors.blueAccent,
                   onChanged: (val) => setD(() => isCash = val),
                 ),
               ),
@@ -380,7 +367,7 @@ class _ProductScreenState extends State<ProductScreen>
                               children: [
                                 const TextSpan(text: 'Stok: '),
                                 TextSpan(
-                                  text: '${_fmt(stock)} ${(item['unit'] as String?) ?? ''}',
+                                  text: '${formatQty(stock)} ${(item['unit'] as String?) ?? ''}',
                                   style: TextStyle(
                                     color: isEmpty ? Colors.red : isLow ? Colors.orange.shade800 : Colors.black87,
                                     fontWeight: FontWeight.bold,
@@ -391,7 +378,7 @@ class _ProductScreenState extends State<ProductScreen>
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            "Beli: ${_formatRupiah(item['purchase_price'] ?? 0)}  |  Jual: ${_formatRupiah(item['selling_price'] ?? 0)}",
+                            "Beli: ${formatRupiah(item['purchase_price'] ?? 0)}  |  Jual: ${formatRupiah(item['selling_price'] ?? 0)}",
                             style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
                           ),
                         ],
@@ -431,7 +418,11 @@ class _ProductScreenState extends State<ProductScreen>
                           onPressed: () async {
                             await Navigator.push(
                               context,
-                              MaterialPageRoute(builder: (_) => const ProductionScreen()),
+                              MaterialPageRoute(
+                                builder: (_) => ProductionScreen(
+                                  initialProductId: item['id'] as int,
+                                ),
+                              ),
                             );
                             _loadAll();
                           },
@@ -480,6 +471,20 @@ class _ProductScreenState extends State<ProductScreen>
                           }
                         },
                       ),
+                      _buildActionButton(
+                        icon: Icons.edit_outlined,
+                        label: "Edit",
+                        color: Colors.blueAccent,
+                        onPressed: () async {
+                          final result = await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => AddProductScreen(product: item),
+                            ),
+                          );
+                          if (result == true) _loadAll();
+                        },
+                      ),
                       IconButton(
                         icon: const Icon(Icons.delete_outline, color: Colors.grey),
                         tooltip: "Hapus",
@@ -505,7 +510,7 @@ class _ProductScreenState extends State<ProductScreen>
         label: Text(label, style: TextStyle(color: color, fontSize: 12)),
         style: TextButton.styleFrom(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          backgroundColor: color.withOpacity(0.1),
+          backgroundColor: color.withValues(alpha: 0.1),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         ),
         onPressed: onPressed,
@@ -541,7 +546,7 @@ class _ProductScreenState extends State<ProductScreen>
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          color: selected ? color : color.withOpacity(0.05),
+          color: selected ? color : color.withValues(alpha: 0.05),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(color: selected ? color : Colors.transparent),
         ),

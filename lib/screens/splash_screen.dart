@@ -57,23 +57,23 @@ class _SplashScreenState extends State<SplashScreen>
       _startAnimations();
     });
 
-Future.delayed(const Duration(milliseconds: 4500), () async {
-  if (!mounted) return;
-  final prefs = await SharedPreferences.getInstance();
-  final pin = prefs.getString('app_pin');
-  if (!mounted) return;
-  Navigator.pushReplacement(
-    context,
-    PageRouteBuilder(
-      transitionDuration: const Duration(milliseconds: 800),
-      pageBuilder: (_, animation, __) =>
-          pin == null ? const SetupPinScreen() : const PinScreen(),
-      transitionsBuilder: (_, animation, __, child) {
-        return FadeTransition(opacity: animation, child: child);
-      },
-    ),
-  );
-});
+    Future.delayed(const Duration(milliseconds: 1400), () async {
+      if (!mounted) return;
+      final prefs = await SharedPreferences.getInstance();
+      final pin = prefs.getString('app_pin');
+      if (!mounted) return;
+      Navigator.pushReplacement(
+        context,
+        PageRouteBuilder(
+          transitionDuration: const Duration(milliseconds: 350),
+          pageBuilder: (_, animation, _) =>
+              pin == null ? const SetupPinScreen() : const PinScreen(),
+          transitionsBuilder: (_, animation, _, child) {
+            return FadeTransition(opacity: animation, child: child);
+          },
+        ),
+      );
+    });
   }
 
   void _generateParticles() {
@@ -93,14 +93,14 @@ Future.delayed(const Duration(milliseconds: 4500), () async {
     // Background
     _bgController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 3000),
+      duration: const Duration(milliseconds: 1000),
     );
     _bgAnim = CurvedAnimation(parent: _bgController, curve: Curves.easeInOut);
 
     // Logo
     _logoController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1200),
+      duration: const Duration(milliseconds: 700),
     );
     _logoScale = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _logoController, curve: Curves.elasticOut),
@@ -118,7 +118,7 @@ Future.delayed(const Duration(milliseconds: 4500), () async {
     // Text
     _textController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1000),
+      duration: const Duration(milliseconds: 500),
     );
     _titleOpacity = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
@@ -151,7 +151,7 @@ Future.delayed(const Duration(milliseconds: 4500), () async {
     // Shimmer
     _shimmerController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 2000),
+      duration: const Duration(milliseconds: 1000),
     );
     _shimmerAnim = Tween<double>(begin: -1.5, end: 2.5).animate(
       CurvedAnimation(parent: _shimmerController, curve: Curves.easeInOut),
@@ -160,7 +160,7 @@ Future.delayed(const Duration(milliseconds: 4500), () async {
     // Pulse
     _pulseController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1500),
+      duration: const Duration(milliseconds: 1200),
     );
     _pulseAnim = Tween<double>(begin: 1.0, end: 1.15).animate(
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
@@ -174,16 +174,20 @@ Future.delayed(const Duration(milliseconds: 4500), () async {
   }
 
   void _startAnimations() async {
+    if (!mounted) return;
     _bgController.forward();
     _particleController.repeat();
 
-    await Future.delayed(const Duration(milliseconds: 200));
+    await Future.delayed(const Duration(milliseconds: 80));
+    if (!mounted) return;
     _logoController.forward();
 
-    await Future.delayed(const Duration(milliseconds: 800));
+    await Future.delayed(const Duration(milliseconds: 250));
+    if (!mounted) return;
     _textController.forward();
 
-    await Future.delayed(const Duration(milliseconds: 400));
+    await Future.delayed(const Duration(milliseconds: 150));
+    if (!mounted) return;
     _shimmerController.forward();
     _pulseController.repeat(reverse: true);
   }
@@ -255,8 +259,10 @@ Future.delayed(const Duration(milliseconds: 4500), () async {
                       shape: BoxShape.circle,
                       gradient: RadialGradient(
                         colors: [
-                          const Color(0xFF4F8EF7).withOpacity(0.12 * _bgAnim.value),
-                          const Color(0xFF8B5CF6).withOpacity(0.06 * _bgAnim.value),
+                          const Color(0xFF4F8EF7)
+                              .withValues(alpha: 0.12 * _bgAnim.value),
+                          const Color(0xFF8B5CF6)
+                              .withValues(alpha: 0.06 * _bgAnim.value),
                           Colors.transparent,
                         ],
                       ),
@@ -344,12 +350,14 @@ Future.delayed(const Duration(milliseconds: 4500), () async {
                                   shape: BoxShape.circle,
                                   boxShadow: [
                                     BoxShadow(
-                                      color: const Color(0xFF4F8EF7).withOpacity(0.4),
+                                      color: const Color(0xFF4F8EF7)
+                                          .withValues(alpha: 0.4),
                                       blurRadius: 40,
                                       spreadRadius: 10,
                                     ),
                                     BoxShadow(
-                                      color: const Color(0xFF8B5CF6).withOpacity(0.3),
+                                      color: const Color(0xFF8B5CF6)
+                                          .withValues(alpha: 0.3),
                                       blurRadius: 60,
                                       spreadRadius: 5,
                                     ),
@@ -372,7 +380,8 @@ Future.delayed(const Duration(milliseconds: 4500), () async {
                                   ),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: const Color(0xFF4F8EF7).withOpacity(0.5),
+                                      color: const Color(0xFF4F8EF7)
+                                          .withValues(alpha: 0.5),
                                       blurRadius: 20,
                                       spreadRadius: 2,
                                     ),
@@ -434,10 +443,12 @@ Future.delayed(const Duration(milliseconds: 4500), () async {
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(20),
                             border: Border.all(
-                              color: const Color(0xFF4F8EF7).withOpacity(0.3),
+                              color: const Color(0xFF4F8EF7)
+                                  .withValues(alpha: 0.3),
                               width: 1,
                             ),
-                            color: const Color(0xFF4F8EF7).withOpacity(0.08),
+                            color: const Color(0xFF4F8EF7)
+                                .withValues(alpha: 0.08),
                           ),
                           child: const Text(
                             'Kelola bisnis dengan mudah',
@@ -559,13 +570,14 @@ class _LoadingDots extends StatelessWidget {
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: Color.lerp(
-                      const Color(0xFF4F8EF7).withOpacity(0.4),
+                      const Color(0xFF4F8EF7).withValues(alpha: 0.4),
                       const Color(0xFF8B5CF6),
                       bounce,
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFF4F8EF7).withOpacity(0.5 * bounce),
+                        color: const Color(0xFF4F8EF7)
+                            .withValues(alpha: 0.5 * bounce),
                         blurRadius: 8,
                       ),
                     ],

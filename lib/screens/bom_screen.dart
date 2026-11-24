@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import '../database/database_helper.dart';
+import '../utils/formatters.dart';
 
 /// Screen untuk kelola BOM (Bill of Materials) satu produk jadi.
-/// Dipanggil dari product_screen dengan passing data produk.
+/// Dipanggil dari product_screen / production_screen dengan passing data produk.
 class BomScreen extends StatefulWidget {
   final Map<String, dynamic> product;
 
@@ -37,16 +38,31 @@ class _BomScreenState extends State<BomScreen> {
     }
   }
 
-  // Format angka: 2.0 → "2", 1.5 → "1.5"
-  String _fmt(num v) =>
-      v == v.toInt() ? v.toInt().toString() : v.toStringAsFixed(2);
+  InputDecoration _dialogInputDecor(String label, {String? suffixText}) {
+    return InputDecoration(
+      labelText: label,
+      suffixText: suffixText,
+      filled: true,
+      fillColor: Colors.grey.shade50,
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: Colors.grey.shade300),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: Colors.grey.shade300),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Colors.blueAccent, width: 2),
+      ),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+    );
+  }
 
   // Dialog tambah / edit bahan BOM
   Future<void> _showBomDialog({Map<String, dynamic>? existing}) async {
-    // Bahan yang sudah ada di BOM — tidak boleh duplikat saat tambah
     final usedIds = _bomItems.map((b) => b['material_id'] as int).toSet();
-
-    // Saat edit, allow bahan yang sedang diedit
     if (existing != null) usedIds.remove(existing['material_id'] as int);
 
     final availableMaterials = _rawMaterials
@@ -57,7 +73,8 @@ class _BomScreenState extends State<BomScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-              "Semua bahan baku sudah ditambahkan ke BOM ini.\nTambah bahan baku baru di menu Produk."),
+            "Semua bahan baku sudah ditambahkan ke BOM ini.\nTambah bahan baku baru di menu Produk.",
+          ),
           duration: Duration(seconds: 3),
         ),
       );
@@ -66,60 +83,61 @@ class _BomScreenState extends State<BomScreen> {
 
     int? selectedMaterialId = existing?['material_id'] as int?;
     final qtyController = TextEditingController(
-      text: existing != null ? _fmt(existing['quantity'] as num) : '',
+      text: existing != null ? formatQty(existing['quantity'] as num) : '',
     );
 
     await showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setD) => AlertDialog(
-          title: Text(existing == null ? "Tambah Bahan" : "Edit Bahan"),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Text(
+            existing == null ? "Tambah Bahan" : "Edit Bahan",
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+          ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Dropdown pilih bahan baku
               DropdownButtonFormField<int>(
-                value: selectedMaterialId,
-                decoration: const InputDecoration(
-                  labelText: "Bahan Baku",
-                  border: OutlineInputBorder(),
-                ),
+                isExpanded: true,
+                initialValue: selectedMaterialId,
+                decoration: _dialogInputDecor("Bahan Baku"),
                 hint: const Text("Pilih bahan"),
                 items: existing != null
-                    // Saat edit: hanya tampilkan bahan yang sedang diedit
                     ? [
                         DropdownMenuItem(
                           value: existing['material_id'] as int,
                           child: Text(
-                              "${existing['material_name']} (${existing['material_unit']})"),
+                            "${existing['material_name']} (${existing['material_unit']})",
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         )
                       ]
                     : availableMaterials.map((m) {
                         return DropdownMenuItem<int>(
                           value: m['id'] as int,
                           child: Text(
-                              "${m['name']} (${m['unit']})"),
+                            "${m['name']} (${m['unit']})",
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         );
                       }).toList(),
                 onChanged: existing != null
-                    ? null // tidak bisa ganti bahan saat edit, hanya qty
+                    ? null
                     : (val) => setD(() => selectedMaterialId = val),
               ),
-              const SizedBox(height: 12),
-              // Input jumlah
+              const SizedBox(height: 14),
               TextField(
                 controller: qtyController,
                 keyboardType:
                     const TextInputType.numberWithOptions(decimal: true),
-                decoration: InputDecoration(
-                  labelText: "Jumlah yang dibutuhkan",
-                  border: const OutlineInputBorder(),
+                decoration: _dialogInputDecor(
+                  "Jumlah dibutuhkan (per 1 unit)",
                   suffixText: selectedMaterialId != null
-                      ? _rawMaterials
-                          .firstWhere(
-                            (m) => m['id'] == selectedMaterialId,
-                            orElse: () => {'unit': ''},
-                          )['unit'] as String
+                      ? _rawMaterials.firstWhere(
+                          (m) => m['id'] == selectedMaterialId,
+                          orElse: () => {'unit': ''},
+                        )['unit'] as String
                       : '',
                 ),
                 autofocus: existing != null,
@@ -132,11 +150,20 @@ class _BomScreenState extends State<BomScreen> {
               child: const Text("Batal"),
             ),
             ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blueAccent,
+                foregroundColor: Colors.white,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
               onPressed: () async {
                 if (selectedMaterialId == null) {
                   ScaffoldMessenger.of(ctx).showSnackBar(
                     const SnackBar(
-                        content: Text("Pilih bahan baku terlebih dahulu")),
+                      content: Text("Pilih bahan baku terlebih dahulu"),
+                    ),
                   );
                   return;
                 }
@@ -144,7 +171,8 @@ class _BomScreenState extends State<BomScreen> {
                 if (qty == null || qty <= 0) {
                   ScaffoldMessenger.of(ctx).showSnackBar(
                     const SnackBar(
-                        content: Text("Masukkan jumlah yang valid")),
+                      content: Text("Masukkan jumlah yang valid"),
+                    ),
                   );
                   return;
                 }
@@ -175,19 +203,26 @@ class _BomScreenState extends State<BomScreen> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text("Hapus Bahan"),
-        content: Text(
-            "Hapus '${item['material_name']}' dari resep ini?"),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text("Hapus Bahan",
+            style: TextStyle(fontWeight: FontWeight.bold)),
+        content: Text("Hapus '${item['material_name']}' dari resep ini?"),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
             child: const Text("Batal"),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
             onPressed: () => Navigator.pop(ctx, true),
-            child:
-                const Text("Hapus", style: TextStyle(color: Colors.white)),
+            child: const Text("Hapus"),
           ),
         ],
       ),
@@ -198,167 +233,295 @@ class _BomScreenState extends State<BomScreen> {
     }
   }
 
+  Future<void> _deleteAllBom() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text("Hapus Semua Bahan",
+            style: TextStyle(fontWeight: FontWeight.bold)),
+        content: const Text("Yakin hapus semua bahan dari BOM ini?"),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text("Batal"),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text("Hapus Semua"),
+          ),
+        ],
+      ),
+    );
+    if (confirm == true) {
+      await DatabaseHelper.instance.deleteAllBom(widget.product['id'] as int);
+      _loadAll();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final productName = widget.product['name'] as String? ?? '';
 
     return Scaffold(
+      backgroundColor: Colors.grey.shade50,
       appBar: AppBar(
+        elevation: 0,
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black87,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text("Kelola BOM",
-                style: TextStyle(fontSize: 16)),
-            Text(productName,
-                style: const TextStyle(
-                    fontSize: 12, fontWeight: FontWeight.normal)),
+            const Text(
+              "Kelola BOM",
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
+            ),
+            Text(
+              productName,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: Colors.grey.shade600,
+              ),
+            ),
           ],
         ),
         actions: [
-          // Tombol hapus semua BOM
           if (_bomItems.isNotEmpty)
             IconButton(
-              icon: const Icon(Icons.delete_sweep),
+              icon: const Icon(Icons.delete_sweep_outlined, color: Colors.red),
               tooltip: "Hapus semua bahan",
-              onPressed: () async {
-                final confirm = await showDialog<bool>(
-                  context: context,
-                  builder: (ctx) => AlertDialog(
-                    title: const Text("Hapus Semua Bahan"),
-                    content:
-                        const Text("Yakin hapus semua bahan dari BOM ini?"),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(ctx, false),
-                        child: const Text("Batal"),
-                      ),
-                      ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.red),
-                        onPressed: () => Navigator.pop(ctx, true),
-                        child: const Text("Hapus Semua",
-                            style: TextStyle(color: Colors.white)),
-                      ),
-                    ],
-                  ),
-                );
-                if (confirm == true) {
-                  await DatabaseHelper.instance
-                      .deleteAllBom(widget.product['id'] as int);
-                  _loadAll();
-                }
-              },
+              onPressed: _deleteAllBom,
             ),
+          const SizedBox(width: 4),
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _showBomDialog(),
-        icon: const Icon(Icons.add),
-        label: const Text("Tambah Bahan"),
+        backgroundColor: Colors.blueAccent,
+        icon: const Icon(Icons.add, color: Colors.white),
+        label: const Text(
+          "Tambah Bahan",
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _bomItems.isEmpty
               ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.receipt_long,
-                          size: 64, color: Colors.grey.shade300),
-                      const SizedBox(height: 12),
-                      const Text("Belum ada bahan di BOM ini",
-                          style: TextStyle(color: Colors.grey)),
-                      const SizedBox(height: 4),
-                      const Text(
-                          "Tap tombol + untuk menambah bahan baku",
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(22),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade200,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.receipt_long_rounded,
+                            size: 56,
+                            color: Colors.grey.shade400,
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        const Text(
+                          "Belum ada bahan di BOM ini",
                           style: TextStyle(
-                              color: Colors.grey, fontSize: 12)),
-                    ],
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                            color: Colors.black87,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          "Tap tombol '+ Tambah Bahan' untuk menyusun resep bahan baku produk ini.",
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Colors.grey.shade600,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 )
               : Column(
                   children: [
-                    // Info header
+                    // Info banner modern
                     Container(
                       width: double.infinity,
+                      margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 10),
-                      color: Colors.blue.shade50,
-                      child: Text(
-                        "Resep untuk 1 unit $productName",
-                        style: TextStyle(
-                            color: Colors.blue.shade700,
-                            fontWeight: FontWeight.w500),
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.shade50,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: Colors.blue.shade100),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.info_outline_rounded,
+                            color: Colors.blueAccent,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              "Resep untuk 1 unit $productName (${_bomItems.length} bahan)",
+                              style: TextStyle(
+                                color: Colors.blue.shade800,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                     Expanded(
                       child: ListView.builder(
-                        padding: const EdgeInsets.only(bottom: 80),
+                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 100),
                         itemCount: _bomItems.length,
                         itemBuilder: (ctx, i) {
                           final item = _bomItems[i];
                           final double needed =
                               (item['quantity'] as num).toDouble();
                           final double stock =
-                              (item['material_stock'] as num?)
-                                      ?.toDouble() ??
-                                  0;
+                              (item['material_stock'] as num?)?.toDouble() ?? 0;
                           final bool isShort = stock < needed;
 
                           return Card(
-                            margin: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 4),
-                            child: ListTile(
-                              leading: CircleAvatar(
-                                backgroundColor:
-                                    isShort ? Colors.red : Colors.green,
-                                child: Icon(
-                                  isShort
-                                      ? Icons.warning
-                                      : Icons.check,
-                                  color: Colors.white,
-                                  size: 18,
-                                ),
+                            elevation: 0,
+                            margin: const EdgeInsets.only(bottom: 12),
+                            color: isShort ? Colors.red.shade50 : Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                              side: BorderSide(
+                                color: isShort
+                                    ? Colors.red.shade200
+                                    : Colors.grey.shade200,
                               ),
-                              title: Text(
-                                  item['material_name'] as String? ?? ''),
-                              subtitle: Column(
-                                crossAxisAlignment:
-                                    CrossAxisAlignment.start,
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.all(14),
+                              child: Row(
                                 children: [
-                                  Text(
-                                    "Dibutuhkan: ${_fmt(needed)} ${item['material_unit']}",
-                                    style: const TextStyle(fontSize: 13),
-                                  ),
-                                  Text(
-                                    "Stok saat ini: ${_fmt(stock)} ${item['material_unit']}",
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: isShort
-                                          ? Colors.red
-                                          : Colors.grey,
+                                  CircleAvatar(
+                                    radius: 20,
+                                    backgroundColor: isShort
+                                        ? Colors.redAccent
+                                        : Colors.green,
+                                    child: Icon(
+                                      isShort
+                                          ? Icons.warning_amber_rounded
+                                          : Icons.check_rounded,
+                                      color: Colors.white,
+                                      size: 20,
                                     ),
                                   ),
-                                ],
-                              ),
-                              isThreeLine: true,
-                              trailing: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
+                                  const SizedBox(width: 14),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Expanded(
+                                              child: Text(
+                                                item['material_name']
+                                                        as String? ??
+                                                    '',
+                                                style: const TextStyle(
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 15,
+                                                ),
+                                              ),
+                                            ),
+                                            Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                horizontal: 8,
+                                                vertical: 3,
+                                              ),
+                                              decoration: BoxDecoration(
+                                                color: (isShort
+                                                        ? Colors.red
+                                                        : Colors.green)
+                                                    .withValues(alpha: 0.12),
+                                                borderRadius:
+                                                    BorderRadius.circular(8),
+                                              ),
+                                              child: Text(
+                                                isShort ? 'Kurang' : 'Cukup',
+                                                style: TextStyle(
+                                                  fontSize: 10,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: isShort
+                                                      ? Colors.red
+                                                      : Colors.green,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          "Dibutuhkan: ${formatQty(needed)} ${item['material_unit']}",
+                                          style: TextStyle(
+                                            fontSize: 13,
+                                            color: Colors.grey.shade800,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                        Text(
+                                          "Stok saat ini: ${formatQty(stock)} ${item['material_unit']}",
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: isShort
+                                                ? Colors.red
+                                                : Colors.grey.shade600,
+                                            fontWeight: isShort
+                                                ? FontWeight.w600
+                                                : FontWeight.normal,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
                                   IconButton(
-                                    icon: const Icon(Icons.edit,
-                                        color: Colors.blue),
+                                    icon: const Icon(
+                                      Icons.edit_outlined,
+                                      color: Colors.blueAccent,
+                                      size: 20,
+                                    ),
                                     tooltip: "Edit jumlah",
                                     onPressed: () =>
                                         _showBomDialog(existing: item),
                                   ),
                                   IconButton(
-                                    icon: const Icon(
-                                        Icons.delete_outline,
-                                        color: Colors.grey),
+                                    icon: Icon(
+                                      Icons.delete_outline,
+                                      color: Colors.grey.shade500,
+                                      size: 20,
+                                    ),
                                     tooltip: "Hapus",
-                                    onPressed: () =>
-                                        _deleteBomItem(item),
+                                    onPressed: () => _deleteBomItem(item),
                                   ),
                                 ],
                               ),

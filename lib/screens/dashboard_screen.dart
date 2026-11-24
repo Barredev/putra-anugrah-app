@@ -1,11 +1,15 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:permission_handler/permission_handler.dart';
+import 'package:file_picker/file_picker.dart';
 import '../database/database_helper.dart';
+import '../utils/formatters.dart';
 import 'product_screen.dart';
 import 'analysis_screen.dart';
 import 'production_screen.dart';
 import 'debt_screen.dart';
 import 'profit_screen.dart';
+import 'pin_screen.dart';
+import 'setup_pin_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -54,38 +58,82 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
-  Future<bool> _requestStoragePermission() async {
-    if (await Permission.manageExternalStorage.isGranted) return true;
-    PermissionStatus status = await Permission.storage.request();
-    if (!status.isGranted) {
-      status = await Permission.manageExternalStorage.request();
-    }
-    if (!status.isGranted && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
+  Future<void> _backupData() async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final bytes = await DatabaseHelper.instance.exportDatabaseBytes();
+      final now = DateTime.now();
+      final stamp =
+          '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}_'
+          '${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}';
+      final fileName = 'backup_putra_anugrah_$stamp.db';
+
+      final savedPath = await FilePicker.platform.saveFile(
+        dialogTitle: 'Simpan Backup Database',
+        fileName: fileName,
+        type: FileType.any,
+        bytes: bytes,
+      );
+
+      if (savedPath == null) return; // User membatalkan
+
+      // Pada desktop (Windows/macOS/Linux), saveFile hanya mengembalikan path tanpa menulis bytes
+      if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+        await File(savedPath).writeAsBytes(bytes, flush: true);
+      }
+
+      if (!mounted) return;
+      messenger.showSnackBar(
         SnackBar(
-          content: const Text(
-              "Izin storage diperlukan. Buka pengaturan untuk mengizinkan."),
-          backgroundColor: Colors.red,
-          action: SnackBarAction(
-            label: "Buka Pengaturan",
-            textColor: Colors.white,
-            onPressed: () => openAppSettings(),
-          ),
+          content: Text("Backup berhasil disimpan ($fileName)"),
+          backgroundColor: Colors.green,
         ),
       );
-      return false;
+    } catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text("Backup gagal: $e"),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
-    return true;
   }
 
-  Future<void> confirmRestore() async {
+  Future<void> _restoreData() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final result = await FilePicker.platform.pickFiles(
+      dialogTitle: 'Pilih File Backup (.db)',
+      type: FileType.any,
+      allowMultiple: false,
+    );
+
+    if (result == null || result.files.isEmpty) return;
+    final picked = result.files.single;
+    final sourcePath = picked.path;
+    if (sourcePath == null) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text("Path file backup tidak dapat dibaca"),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    if (!mounted) return;
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text("Konfirmasi Restore"),
-        content: const Text(
-            "Semua data saat ini akan ditimpa dengan data backup.\n\nLanjutkan?"),
+        title: const Text("Konfirmasi Restore",
+            style: TextStyle(fontWeight: FontWeight.bold)),
+        content: Text(
+          "File dipilih:\n${picked.name}\n\n"
+          "Semua data saat ini akan ditimpa dengan data backup ini.\n"
+          "File akan divalidasi terlebih dahulu sebelum diterapkan.\n\nLanjutkan?",
+        ),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
@@ -93,7 +141,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ElevatedButton(
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.red,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8)),
             ),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text("Ya, Restore",
@@ -106,10 +155,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     setState(() => _isLoading = true);
     try {
-      await DatabaseHelper.instance.restoreDatabase();
+      await DatabaseHelper.instance.restoreDatabaseFromFile(sourcePath);
       await loadSummary();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.showSnackBar(
           const SnackBar(
               content: Text("Restore berhasil"),
               backgroundColor: Colors.green),
@@ -117,7 +166,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.showSnackBar(
           SnackBar(
               content: Text("Restore gagal: $e"),
               backgroundColor: Colors.red),
@@ -126,16 +175,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
-  }
-
-  String _formatRupiah(int amount) {
-    final str = amount.abs().toString();
-    final buf = StringBuffer();
-    for (int i = 0; i < str.length; i++) {
-      if (i > 0 && (str.length - i) % 3 == 0) buf.write('.');
-      buf.write(str[i]);
-    }
-    return amount < 0 ? '-Rp $buf' : 'Rp $buf';
   }
 
   Color _catColor(String? type) {
@@ -168,14 +207,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
         icon: Icon(icon, color: color),
         label: Text(
           label,
-          style: TextStyle(fontWeight: FontWeight.bold, color: color.withOpacity(0.9)),
+          style: TextStyle(fontWeight: FontWeight.bold, color: color.withValues(alpha: 0.9)),
         ),
         style: ElevatedButton.styleFrom(
           elevation: 0,
-          backgroundColor: color.withOpacity(0.1), // Warna pastel soft
+          backgroundColor: color.withValues(alpha: 0.1), // Warna pastel soft
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
-            side: BorderSide(color: color.withOpacity(0.2)),
+            side: BorderSide(color: color.withValues(alpha: 0.2)),
           ),
         ),
       ),
@@ -223,7 +262,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             margin: const EdgeInsets.only(bottom: 12),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(16),
-              side: BorderSide(color: color.withOpacity(0.3)),
+              side: BorderSide(color: color.withValues(alpha: 0.3)),
             ),
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -236,14 +275,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         width: 12,
                         height: 12,
                         decoration: BoxDecoration(
-                            color: color.withOpacity(0.8), shape: BoxShape.circle),
+                            color: color.withValues(alpha: 0.8), shape: BoxShape.circle),
                       ),
                       const SizedBox(width: 8),
                       Text(name,
                           style: TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: 14,
-                              color: color.withOpacity(0.9))),
+                              color: color.withValues(alpha: 0.9))),
                     ],
                   ),
                   const SizedBox(height: 12),
@@ -251,13 +290,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   Row(
                     children: [
                       Expanded(
-                        child: _miniStat("Masuk", _formatRupiah(inc), Colors.green, CrossAxisAlignment.start),
+                        child: _miniStat("Masuk", formatRupiah(inc), Colors.green, CrossAxisAlignment.start),
                       ),
                       Expanded(
-                        child: _miniStat("Keluar", _formatRupiah(exp), Colors.red, CrossAxisAlignment.center),
+                        child: _miniStat("Keluar", formatRupiah(exp), Colors.red, CrossAxisAlignment.center),
                       ),
                       Expanded(
-                        child: _miniStat("Profit", _formatRupiah(prf), prf >= 0 ? Colors.blue : Colors.orange, CrossAxisAlignment.end),
+                        child: _miniStat("Profit", formatRupiah(prf), prf >= 0 ? Colors.blue : Colors.orange, CrossAxisAlignment.end),
                       ),
                     ],
                   ),
@@ -309,7 +348,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     child: ListTile(
                       leading: const Icon(Icons.arrow_upward_rounded, color: Colors.green),
                       title: const Text("Pemasukan", style: TextStyle(fontSize: 14)),
-                      trailing: Text(_formatRupiah(income),
+                      trailing: Text(formatRupiah(income),
                           style: const TextStyle(
                               color: Colors.green, fontWeight: FontWeight.bold, fontSize: 16)),
                     ),
@@ -324,7 +363,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     child: ListTile(
                       leading: const Icon(Icons.arrow_downward_rounded, color: Colors.red),
                       title: const Text("Pengeluaran", style: TextStyle(fontSize: 14)),
-                      trailing: Text(_formatRupiah(expense),
+                      trailing: Text(formatRupiah(expense),
                           style: const TextStyle(
                               color: Colors.red, fontWeight: FontWeight.bold, fontSize: 16)),
                     ),
@@ -343,7 +382,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                       title: const Text("Profit", style: TextStyle(fontSize: 14)),
                       trailing: Text(
-                        _formatRupiah(profit),
+                        formatRupiah(profit),
                         style: TextStyle(
                           color: profit >= 0 ? Colors.blue : Colors.orange,
                           fontWeight: FontWeight.bold,
@@ -372,7 +411,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   style: TextStyle(fontSize: 12, color: Colors.grey),
                                   textAlign: TextAlign.center),
                               const SizedBox(height: 8),
-                              Text(_formatRupiah(totalReceivable),
+                              Text(formatRupiah(totalReceivable),
                                   style: const TextStyle(
                                       color: Colors.green, fontWeight: FontWeight.bold, fontSize: 15)),
                             ]),
@@ -392,7 +431,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   style: TextStyle(fontSize: 12, color: Colors.grey),
                                   textAlign: TextAlign.center),
                               const SizedBox(height: 8),
-                              Text(_formatRupiah(totalPayable),
+                              Text(formatRupiah(totalPayable),
                                   style: const TextStyle(
                                       color: Colors.red, fontWeight: FontWeight.bold, fontSize: 15)),
                             ]),
@@ -407,7 +446,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           onTap: () async {
                             await Navigator.push(
                               context,
-                              MaterialPageRoute(builder: (_) => const DebtScreen()),
+                              MaterialPageRoute(
+                                  builder: (_) =>
+                                      const DebtScreen(showOverdue: true)),
                             );
                             loadSummary();
                           },
@@ -560,35 +601,33 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   SizedBox(
                     height: 50,
                     child: OutlinedButton.icon(
-                      onPressed: () async {
-                        final granted = await _requestStoragePermission();
-                        if (!granted) return;
-                        try {
-                          final path = await DatabaseHelper.instance.backupDatabase();
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text("Backup berhasil:\n$path"),
-                                backgroundColor: Colors.green,
-                              ),
-                            );
-                          }
-                        } catch (e) {
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text("Backup gagal: $e"),
-                                backgroundColor: Colors.red,
-                              ),
-                            );
-                          }
-                        }
-                      },
-                      icon: const Icon(Icons.cloud_upload_outlined, color: Colors.blueGrey),
-                      label: const Text("Backup Data", style: TextStyle(color: Colors.blueGrey)),
+                      onPressed: _backupData,
+                      icon: const Icon(Icons.cloud_upload_outlined,
+                          color: Colors.blueGrey),
+                      label: const Text("Backup Data (.db)",
+                          style: TextStyle(color: Colors.blueGrey)),
                       style: OutlinedButton.styleFrom(
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                        side: BorderSide(color: Colors.blueGrey.withOpacity(0.3)),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16)),
+                        side: BorderSide(
+                            color: Colors.blueGrey.withValues(alpha: 0.3)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    height: 50,
+                    child: OutlinedButton.icon(
+                      onPressed: _restoreData,
+                      icon: const Icon(Icons.restore_rounded,
+                          color: Colors.deepOrange),
+                      label: const Text("Restore dari File Backup",
+                          style: TextStyle(color: Colors.deepOrange)),
+                      style: OutlinedButton.styleFrom(
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16)),
+                        side: BorderSide(
+                            color: Colors.deepOrange.withValues(alpha: 0.3)),
                       ),
                     ),
                   ),
@@ -597,15 +636,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     height: 50,
                     child: OutlinedButton.icon(
                       onPressed: () async {
-                        final granted = await _requestStoragePermission();
-                        if (!granted) return;
-                        confirmRestore();
+                        final navigator = Navigator.of(context);
+                        final verified = await navigator.push<bool>(
+                          MaterialPageRoute(
+                            builder: (_) => const PinScreen(verifyOnly: true),
+                          ),
+                        );
+                        if (verified == true && mounted) {
+                          await navigator.push(
+                            MaterialPageRoute(
+                              builder: (_) =>
+                                  const SetupPinScreen(isChanging: true),
+                            ),
+                          );
+                        }
                       },
-                      icon: const Icon(Icons.restore_rounded, color: Colors.deepOrange),
-                      label: const Text("Restore Data", style: TextStyle(color: Colors.deepOrange)),
+                      icon: const Icon(Icons.lock_reset_rounded,
+                          color: Colors.indigo),
+                      label: const Text("Ganti PIN",
+                          style: TextStyle(color: Colors.indigo)),
                       style: OutlinedButton.styleFrom(
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                        side: BorderSide(color: Colors.deepOrange.withOpacity(0.3)),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16)),
+                        side: BorderSide(
+                            color: Colors.indigo.withValues(alpha: 0.3)),
                       ),
                     ),
                   ),
